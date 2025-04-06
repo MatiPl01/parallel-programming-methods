@@ -1,0 +1,8 @@
+{
+  "files.associations": {
+    "*.dot": "python",
+    "*.py": "python",
+    "omp.h": "c",
+    "stdlib.h": "c"
+  }
+}

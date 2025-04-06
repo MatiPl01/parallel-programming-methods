@@ -1,0 +1,5 @@
+Threads,Static Time (s),Dynamic Time (s),Static Speedup,Dynamic Speedup
+1,8.114100,7.729300,1.000x,1.000x
+2,4.852670,6.906750,1.672x,1.119x
+4,3.476240,3.299390,2.334x,2.343x
+8,2.974910,2.506770,2.728x,3.083x

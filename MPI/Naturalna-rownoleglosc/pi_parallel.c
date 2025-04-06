@@ -24,11 +24,12 @@ int main(int argc, char *argv[]) {
 
     srand(time(NULL) + rank);  // Different seed for each process
 
-    // Synchronization before starting the timing
+    // Ensuring all processes start timing at the same moment
     MPI_Barrier(MPI_COMM_WORLD);
     double start_time = MPI_Wtime();
+    MPI_Barrier(MPI_COMM_WORLD);
 
-    // Perform the Monte Carlo simulation in parallel
+    // Monte Carlo simulation for Pi estimation
     for (long long int i = 0; i < points_per_process; i++) {
         double x = (double)rand() / RAND_MAX;
         double y = (double)rand() / RAND_MAX;
@@ -37,17 +38,16 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    // Collects all partial counts in the root process
+    // Collect results
     MPI_Reduce(&count_in_circle, &total_in_circle, 1, MPI_LONG_LONG_INT, MPI_SUM, 0, MPI_COMM_WORLD);
-    
-    // Synchronization to ensure all processes finish before stopping the timing
+
+    // Ensuring all processes stop simultaneously
     MPI_Barrier(MPI_COMM_WORLD);
     double end_time = MPI_Wtime();
-
+    
+    // Print only the execution time, no other text (simplifies parsing in Bash)
     if (rank == 0) {
-        double pi_estimate = 4 * (double)total_in_circle / (points_per_process * size);
-        printf("Estimated Pi = %f\n", pi_estimate);
-        printf("Time taken = %f seconds\n", end_time - start_time);
+        printf("%f\n", end_time - start_time);
     }
 
     MPI_Finalize();

@@ -1,8 +1,0 @@
-1. Użycie MPI_Rsend + MPI_Irecv dla przesłania komunikatu
-
-Poprawny program NIE ISTNIEJE
-
-Uzasadnienie, dlaczego program taki nie istnieje:
-MPI_Rsend jest funkcją, którą należy wywołać jedynie wtedy, gdy bufor odbierający został już zarejestrowany po stronie odbiorcy poprzez funkcję odbierającą. W przeciwnym razie, MPI_Rsend może prowadzić do niespodziewanych zachowań, ponieważ zakłada ona, że odbiorca jest już gotowy do odbioru danych na moment rozpoczęcia wysyłania.
-
-Z kolei MPI_Irecv jest nieblokującą operacją odbioru, co oznacza, że zwraca kontrolę do programu, zanim faktycznie zakończy odbiór danych. Jeśli zostanie użyta wspólnie z MPI_Rsend, nie ma gwarancji, że odbiór zostanie zarejestrowany przez MPI_Irecv zanim MPI_Rsend rozpocznie wysyłanie. To oznacza, że przypadek ten mógłby prowadzić do deadlocka lub błędu.
