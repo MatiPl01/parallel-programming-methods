@@ -25,26 +25,34 @@ def read_csv_data(filename):
     
     for line in lines:
         line = line.strip()
-        if line.startswith('Synchronous (threads:'):
-            current_thread = int(line.split('threads:')[1].strip(')'))
+        if line.startswith('synchronous'):
+            # Extract thread count from "synchronous (threads: X)"
             current_schedule = 'synchronous'
+            current_thread = int(line.split('threads:')[1].strip(')'))
         elif line.startswith('Schedule:'):
             # Extract schedule and thread count from "Schedule: X (threads: Y)"
             parts = line.split('(')
-            current_schedule = parts[0].split(':')[1].strip()
+            current_schedule = parts[0].split(':')[1].strip().lower()
             current_thread = int(parts[1].split(':')[1].strip(')'))
         elif line.startswith('chunk_size,average_time'):
             continue
         elif ',' in line:
-            chunk_size, time = map(float, line.split(','))
-            data.append({
-                'threads': current_thread,
-                'schedule': current_schedule,
-                'chunk_size': chunk_size,
-                'average_time': time
-            })
+            try:
+                chunk_size, time = map(float, line.split(','))
+                data.append({
+                    'threads': current_thread,
+                    'schedule': current_schedule,
+                    'chunk_size': chunk_size,
+                    'average_time': time
+                })
+            except ValueError:
+                # Skip lines that can't be parsed as numbers
+                continue
     
-    return pd.DataFrame(data)
+    df = pd.DataFrame(data)
+    # Filter out any rows with None values
+    df = df.dropna()
+    return df
 
 def setup_plot_style():
     plt.style.use('seaborn-v0_8-darkgrid')
@@ -269,7 +277,9 @@ if __name__ == "__main__":
     
     print(f"Found schedules: {schedules}")
     
-    best_seq_time = data[data['threads'] == 1]['average_time'].min()
+    # Get best sequential time from synchronous execution or static schedule with 1 thread
+    seq_data = data[(data['threads'] == 1) & ((data['schedule'] == 'synchronous') | (data['schedule'] == 'static'))]
+    best_seq_time = seq_data['average_time'].min()
     print(f"Best sequential time: {best_seq_time:.6f} seconds")
     
     setup_plot_style()
