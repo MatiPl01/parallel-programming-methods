@@ -17,24 +17,12 @@ typedef struct {
     int capacity;
 } Bucket;
 
-// Function to initialize a bucket
 void init_bucket(Bucket *bucket, int initial_capacity) {
     bucket->data = (int*)malloc(initial_capacity * sizeof(int));
     bucket->size = 0;
     bucket->capacity = initial_capacity;
 }
 
-// Function to add an element to a bucket
-void add_to_bucket(Bucket *bucket, int value) {
-    if (bucket->size >= bucket->capacity) {
-        // Double the capacity
-        bucket->capacity *= 2;
-        bucket->data = (int*)realloc(bucket->data, bucket->capacity * sizeof(int));
-    }
-    bucket->data[bucket->size++] = value;
-}
-
-// Helper function to calculate bucket index
 int get_bucket_index(int value, int num_buckets) {
     int bucket_idx = (int)((long long)(value - MIN_VALUE) * num_buckets / (MAX_VALUE - MIN_VALUE));
     if (bucket_idx >= num_buckets) bucket_idx = num_buckets - 1;
@@ -42,7 +30,6 @@ int get_bucket_index(int value, int num_buckets) {
     return bucket_idx;
 }
 
-// Function to fill the array with random numbers using guided scheduling
 double fill_random_numbers(int *array, int n) {
     double start_time = omp_get_wtime();
     unsigned int base_seed = (unsigned int)time(NULL);
@@ -66,20 +53,18 @@ double fill_random_numbers(int *array, int n) {
     return omp_get_wtime() - start_time;
 }
 
-// Insertion sort algorithm for sorting individual buckets
-void insertion_sort(int *bucket, int bucket_size) {
-    for (int i = 1; i < bucket_size; i++) {
-        int value = bucket[i];
-        int j = i - 1;
-        while (j >= 0 && bucket[j] > value) {
-            bucket[j + 1] = bucket[j];
-            j--;
-        }
-        bucket[j + 1] = value;
+// Comparison function for qsort
+int compare_ints(const void* a, const void* b) {
+    return (*(int*)a - *(int*)b);
+}
+
+// Wrapper function for qsort
+void sort_bucket(int *bucket, int bucket_size) {
+    if (bucket_size > 1) {
+        qsort(bucket, bucket_size, sizeof(int), compare_ints);
     }
 }
 
-// Function to verify if array is sorted
 bool is_sorted(int *arr, int n) {
     for (int i = 1; i < n; i++) {
         if (arr[i] < arr[i-1]) return false;
@@ -87,53 +72,40 @@ bool is_sorted(int *arr, int n) {
     return true;
 }
 
-// Function to distribute elements to buckets
 double distribute_to_buckets(int *arr, int array_size, Bucket *buckets, int num_buckets) {
     double start_time = omp_get_wtime();
-    
-    #pragma omp parallel
-    {
-        // Each thread reads its own portion of the array
-        #pragma omp for schedule(guided)
-        for (int i = 0; i < array_size; i++) {
-            // Calculate bucket index
-            int bucket_idx = get_bucket_index(arr[i], num_buckets);
-            
-            int position;
-            // Atomically get the position and increment the size
-            #pragma omp atomic capture
-            {
-                position = buckets[bucket_idx].size;
-                buckets[bucket_idx].size++;
-            }
-            
-            // Check if we need to resize the bucket
-            if (position >= buckets[bucket_idx].capacity) {
-                // Use a critical section for resizing to avoid race conditions
-                #pragma omp critical
-                {
-                    // Double check if we still need to resize (another thread might have already done it)
-                    if (position >= buckets[bucket_idx].capacity) {
-                        // Double the capacity
-                        int new_capacity = buckets[bucket_idx].capacity * 2;
-                        int *new_data = (int*)realloc(buckets[bucket_idx].data, new_capacity * sizeof(int));
-                        
-                        // Update the bucket with new data and capacity
-                        buckets[bucket_idx].data = new_data;
-                        buckets[bucket_idx].capacity = new_capacity;
-                    }
-                }
-            }
-            
-            // Add the element to the bucket
-            buckets[bucket_idx].data[position] = arr[i];
-        }
+
+    // First pass: Calculate bucket sizes
+    #pragma omp parallel for schedule(guided)
+    for (int i = 0; i < array_size; i++) {
+        int value = arr[i];
+        int bucket_idx = get_bucket_index(value, num_buckets);
+        #pragma omp atomic
+        buckets[bucket_idx].size++;
     }
-    
+
+    // Allocate bucket data arrays
+    #pragma omp parallel for schedule(guided)
+    for (int i = 0; i < num_buckets; i++) {
+        buckets[i].data = (int*)malloc(buckets[i].size * sizeof(int));
+        buckets[i].capacity = buckets[i].size;
+        buckets[i].size = 0; // Reset size to use as counter in second pass
+    }
+
+    // Second pass: Distribute elements
+    #pragma omp parallel for schedule(guided)
+    for (int i = 0; i < array_size; i++) {
+        int value = arr[i];
+        int bucket_idx = get_bucket_index(value, num_buckets);
+        int pos;
+        #pragma omp atomic capture
+        pos = buckets[bucket_idx].size++;
+        buckets[bucket_idx].data[pos] = value;
+    }
+
     return omp_get_wtime() - start_time;
 }
 
-// Function to sort buckets
 double sort_buckets(Bucket *buckets, int num_buckets) {
     double start_time = omp_get_wtime();
     
@@ -142,15 +114,14 @@ double sort_buckets(Bucket *buckets, int num_buckets) {
         // Each thread processes a subset of buckets
         #pragma omp for schedule(dynamic, 1)
         for (int i = 0; i < num_buckets; i++) {
-            // Sort the bucket
-            insertion_sort(buckets[i].data, buckets[i].size);
+            // Sort the bucket using qsort
+            sort_bucket(buckets[i].data, buckets[i].size);
         }
     }
     
     return omp_get_wtime() - start_time;
 }
 
-// Function to rewrite sorted buckets back to the original array
 double rewrite_buckets_to_array(int *arr, int array_size, Bucket *buckets, int num_buckets) {
     double start_time = omp_get_wtime();
     
@@ -190,7 +161,6 @@ typedef struct {
     double total_time;
 } TimingInfo;
 
-// Bucket sort algorithm that takes an input array and sorts it in-place
 TimingInfo bucket_sort(int *arr, int array_size, int num_buckets, int initial_bucket_capacity) {
     TimingInfo timing = {0.0, 0.0, 0.0, 0.0, 0.0};
     double start_time = omp_get_wtime();
@@ -221,7 +191,6 @@ TimingInfo bucket_sort(int *arr, int array_size, int num_buckets, int initial_bu
     return timing;
 }
 
-// Function to run multiple repetitions and calculate averages
 TimingInfo run_multiple_times(int array_size, int num_threads, int num_buckets, int initial_bucket_capacity, int num_repetitions) {
     TimingInfo avg_timing = {0.0, 0.0, 0.0, 0.0, 0.0};
     
@@ -232,7 +201,7 @@ TimingInfo run_multiple_times(int array_size, int num_threads, int num_buckets, 
     int *arr = (int*)malloc(array_size * sizeof(int));
     if (!arr) {
         fprintf(stderr, "Failed to allocate memory\n");
-        exit(1);
+        exit(EXIT_FAILURE);
     }
     
     // Run the test multiple times
@@ -250,7 +219,7 @@ TimingInfo run_multiple_times(int array_size, int num_threads, int num_buckets, 
         if (!sorted) {
             fprintf(stderr, "Error: Array was not sorted correctly in repetition %d\n", rep + 1);
             free(arr);
-            exit(1);
+            exit(EXIT_FAILURE);
         }
         
         // Accumulate timing information

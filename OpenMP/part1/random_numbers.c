@@ -10,6 +10,20 @@
 void fill_random_numbers(int *array, int n, char* schedule_param, int chunk_size) {
     unsigned int base_seed = (unsigned int)time(NULL);
     
+    // Check if we're running synchronously
+    if (strcmp(schedule_param, "synchronous") == 0) {
+        // Synchronous case - run sequentially
+        struct drand48_data buffer;
+        srand48_r(base_seed, &buffer);
+        for (int i = 0; i < n; i++) {
+            double random_value;
+            drand48_r(&buffer, &random_value);
+            array[i] = (int)(random_value * INT_MAX);
+        }
+        return;
+    }
+    
+    // Multi-threaded case
     #pragma omp parallel
     {
         // Create a unique seed for each thread
@@ -49,7 +63,7 @@ void fill_random_numbers(int *array, int n, char* schedule_param, int chunk_size
 int main(int argc, char** argv) {
     if (argc < 4) {
         fprintf(stderr, "Usage: %s <schedule_param> <chunk_size> <array_size>\n", argv[0]);
-        fprintf(stderr, "schedule_param: static, dynamic, or guided\n");
+        fprintf(stderr, "schedule_param: static, dynamic, guided, or synchronous\n");
         exit(1);
     }
 
@@ -61,8 +75,9 @@ int main(int argc, char** argv) {
     // Validate schedule parameter
     if (strcmp(schedule_param, "static") != 0 && 
         strcmp(schedule_param, "dynamic") != 0 && 
-        strcmp(schedule_param, "guided") != 0) {
-        fprintf(stderr, "Invalid schedule parameter. Use 'static', 'dynamic', or 'guided'.\n");
+        strcmp(schedule_param, "guided") != 0 &&
+        strcmp(schedule_param, "synchronous") != 0) {
+        fprintf(stderr, "Invalid schedule parameter. Use 'static', 'dynamic', 'guided', or 'synchronous'.\n");
         exit(1);
     }
     

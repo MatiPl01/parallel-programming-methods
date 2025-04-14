@@ -12,10 +12,8 @@ COLORS = {
 }
 
 def save_plot(fig, filename, description):
-    os.makedirs('results', exist_ok=True)
-    filepath = os.path.join('results', filename)
-    fig.savefig(filepath, bbox_inches='tight', dpi=300)
-    print(f"Saved: {filename} - {description}")
+    fig.savefig(filename, bbox_inches='tight', dpi=300)
+    print(f"Saved: {os.path.basename(filename)} - {description}")
 
 def read_csv_data(filename):
     with open(filename, 'r') as f:
@@ -27,10 +25,14 @@ def read_csv_data(filename):
     
     for line in lines:
         line = line.strip()
-        if line.startswith('Running with'):
-            current_thread = int(line.split()[2])
+        if line.startswith('Synchronous (threads:'):
+            current_thread = int(line.split('threads:')[1].strip(')'))
+            current_schedule = 'synchronous'
         elif line.startswith('Schedule:'):
-            current_schedule = line.split()[1]
+            # Extract schedule and thread count from "Schedule: X (threads: Y)"
+            parts = line.split('(')
+            current_schedule = parts[0].split(':')[1].strip()
+            current_thread = int(parts[1].split(':')[1].strip(')'))
         elif line.startswith('chunk_size,average_time'):
             continue
         elif ',' in line:
@@ -109,8 +111,9 @@ def create_execution_time_subplot(ax, thread_data, schedules, threads):
     for schedule in schedules:
         color = COLORS.get(schedule, '#000000')
         sched_data = thread_data[thread_data['schedule'] == schedule].sort_values('chunk_size')
-        plot_line_with_best_point(ax, sched_data['chunk_size'], sched_data['average_time'],
-                                color, schedule.capitalize(), 's')
+        if not sched_data.empty:  # Only plot if we have data for this schedule
+            plot_line_with_best_point(ax, sched_data['chunk_size'], sched_data['average_time'],
+                                    color, schedule.capitalize(), 's')
     
     plt.yscale('log', base=2)
     ax.set_title(f'Execution Time ({threads} thread{"s" if threads > 1 else ""})')
@@ -136,9 +139,10 @@ def create_speedup_subplot(ax, thread_data, schedules, best_seq_time, threads):
     for schedule in schedules:
         color = COLORS.get(schedule, '#000000')
         sched_data = thread_data[thread_data['schedule'] == schedule].sort_values('chunk_size')
-        speedups = best_seq_time / sched_data['average_time']
-        plot_line_with_best_point(ax, sched_data['chunk_size'], speedups,
-                                color, schedule.capitalize(), 'x')
+        if not sched_data.empty:  # Only plot if we have data for this schedule
+            speedups = best_seq_time / sched_data['average_time']
+            plot_line_with_best_point(ax, sched_data['chunk_size'], speedups,
+                                    color, schedule.capitalize(), 'x')
     
     # Add ideal speedup line
     ax.axhline(y=threads, color=COLORS['ideal'], linestyle='--',
@@ -174,16 +178,27 @@ def create_speedup_bar_plot(df_combined, thread_counts, schedules):
     # Create bars for each schedule
     for i, schedule in enumerate(schedules):
         schedule_data = df_combined[df_combined['Scheduling'] == schedule]
-        color = COLORS.get(schedule, '#000000')
-        
-        plt.bar(r + i * bar_width, schedule_data['Speedup'], width=bar_width, 
-                label=schedule.capitalize(), color=color, alpha=0.8)
-        
-        # Add value labels and chunk sizes
-        for j in range(len(thread_counts)):
-            plt.text(r[j] + i * bar_width, schedule_data.iloc[j]['Speedup'], 
-                    f'{schedule_data.iloc[j]["Speedup"]:.2f}x\n2^{int(np.log2(schedule_data.iloc[j]["Best Chunk Size"]))}', 
-                    ha='center', va='bottom', fontsize=8)
+        if not schedule_data.empty:  # Only plot if we have data for this schedule
+            color = COLORS.get(schedule, '#000000')
+            
+            # Create array of positions and values
+            positions = []
+            values = []
+            for j, thread in enumerate(thread_counts):
+                thread_data = schedule_data[schedule_data['Threads'] == thread]
+                if not thread_data.empty:
+                    positions.append(r[j] + i * bar_width)
+                    values.append(thread_data.iloc[0]['Speedup'])
+            
+            if positions:  # Only plot if we have any data points
+                plt.bar(positions, values, width=bar_width, 
+                        label=schedule.capitalize(), color=color, alpha=0.8)
+                
+                # Add value labels and chunk sizes
+                for pos, val, chunk_size in zip(positions, values, schedule_data['Best Chunk Size']):
+                    plt.text(pos, val, 
+                            f'{val:.2f}x\n2^{int(np.log2(chunk_size))}', 
+                            ha='center', va='bottom', fontsize=8)
     
     # Add ideal speedup line
     plt.plot(r + (len(schedules) - 1) * bar_width / 2, thread_counts, '--', 
@@ -210,16 +225,27 @@ def create_execution_time_bar_plot(df_combined, thread_counts, schedules):
     # Create bars for each schedule
     for i, schedule in enumerate(schedules):
         schedule_data = df_combined[df_combined['Scheduling'] == schedule]
-        color = COLORS.get(schedule, '#000000')
-        
-        plt.bar(r + i * bar_width, schedule_data['Execution Time'], width=bar_width, 
-                label=schedule.capitalize(), color=color, alpha=0.8)
-        
-        # Add value labels and chunk sizes
-        for j in range(len(thread_counts)):
-            plt.text(r[j] + i * bar_width, schedule_data.iloc[j]['Execution Time'], 
-                    f'{schedule_data.iloc[j]["Execution Time"]:.2f}s\n2^{int(np.log2(schedule_data.iloc[j]["Best Chunk Size"]))}', 
-                    ha='center', va='bottom', fontsize=8)
+        if not schedule_data.empty:  # Only plot if we have data for this schedule
+            color = COLORS.get(schedule, '#000000')
+            
+            # Create array of positions and values
+            positions = []
+            values = []
+            for j, thread in enumerate(thread_counts):
+                thread_data = schedule_data[schedule_data['Threads'] == thread]
+                if not thread_data.empty:
+                    positions.append(r[j] + i * bar_width)
+                    values.append(thread_data.iloc[0]['Execution Time'])
+            
+            if positions:  # Only plot if we have any data points
+                plt.bar(positions, values, width=bar_width, 
+                        label=schedule.capitalize(), color=color, alpha=0.8)
+                
+                # Add value labels and chunk sizes
+                for pos, val, chunk_size in zip(positions, values, schedule_data['Best Chunk Size']):
+                    plt.text(pos, val, 
+                            f'{val:.2f}s\n2^{int(np.log2(chunk_size))}', 
+                            ha='center', va='bottom', fontsize=8)
     
     plt.xlabel('Number of Threads')
     plt.ylabel('Time (seconds)')
@@ -233,9 +259,11 @@ def create_execution_time_bar_plot(df_combined, thread_counts, schedules):
     return fig
 
 if __name__ == "__main__":
-    os.makedirs('results', exist_ok=True)
+    # Get the directory where the script is located
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    os.makedirs(os.path.join(script_dir, 'results'), exist_ok=True)
     
-    data = read_csv_data('data')
+    data = read_csv_data(os.path.join(script_dir, 'data'))
     thread_counts = sorted(data['threads'].unique())
     schedules = sorted(data['schedule'].unique())
     
@@ -248,12 +276,12 @@ if __name__ == "__main__":
     
     # Create and save execution time plots
     fig_exec_time = create_execution_time_plots(data, thread_counts, schedules)
-    save_plot(fig_exec_time, 'execution_time_vs_chunk.png', 
+    save_plot(fig_exec_time, os.path.join(script_dir, 'results', 'execution_time_vs_chunk.png'), 
               'Execution time plots with marked best results')
     
     # Create and save speedup plots
     fig_speedup = create_speedup_plots(data, thread_counts, schedules, best_seq_time)
-    save_plot(fig_speedup, 'speedup_vs_chunk.png', 
+    save_plot(fig_speedup, os.path.join(script_dir, 'results', 'speedup_vs_chunk.png'), 
               'Speedup comparison plots')
     
     # Prepare best results data
@@ -263,30 +291,31 @@ if __name__ == "__main__":
         
         for schedule in schedules:
             sched_data = thread_data[thread_data['schedule'] == schedule]
-            best_idx = sched_data['average_time'].idxmin()
-            best_config = sched_data.loc[best_idx]
-            speedup = best_seq_time / best_config['average_time']
-            
-            best_results.append({
-                'Scheduling': schedule,
-                'Threads': threads,
-                'Best Chunk Size': best_config['chunk_size'],
-                'Execution Time': best_config['average_time'],
-                'Speedup': speedup,
-                'Efficiency': speedup / threads if threads > 0 else 0
-            })
+            if not sched_data.empty:  # Only process if we have data for this schedule
+                best_idx = sched_data['average_time'].idxmin()
+                best_config = sched_data.loc[best_idx]
+                speedup = best_seq_time / best_config['average_time']
+                
+                best_results.append({
+                    'Scheduling': schedule,
+                    'Threads': threads,
+                    'Best Chunk Size': best_config['chunk_size'],
+                    'Execution Time': best_config['average_time'],
+                    'Speedup': speedup,
+                    'Efficiency': speedup / threads if threads > 0 else 0
+                })
     
     # Create and save best results DataFrame
     df_best = pd.DataFrame(best_results)
-    csv_path = os.path.join('results', 'best_results.csv')
+    csv_path = os.path.join(script_dir, 'results', 'best_results.csv')
     df_best.to_csv(csv_path, index=False, float_format='%.3f')
     print("Saved: best_results.csv - Detailed results table")
     
     # Create and save best results bar plots
     fig_speedup_bars = create_speedup_bar_plot(df_best, thread_counts, schedules)
-    save_plot(fig_speedup_bars, 'best_speedup_bars.png', 
+    save_plot(fig_speedup_bars, os.path.join(script_dir, 'results', 'best_speedup_bars.png'), 
               'Bar plot of best speedups')
     
     fig_time_bars = create_execution_time_bar_plot(df_best, thread_counts, schedules)
-    save_plot(fig_time_bars, 'best_time_bars.png', 
+    save_plot(fig_time_bars, os.path.join(script_dir, 'results', 'best_time_bars.png'), 
               'Bar plot of best execution times')

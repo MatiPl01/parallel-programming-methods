@@ -26,13 +26,14 @@ def read_csv_data(filename):
         if line.startswith('Schedule:'):
             if current_thread is not None and current_data:
                 data.append(_create_dataframe(current_data, header, current_thread, current_schedule))
-            current_schedule = line.split(':')[1].strip()
-            current_thread = None
+            current_schedule = line.split('(')[0].split(':')[1].strip()
+            current_thread = int(line.split('threads:')[1].strip().rstrip(')'))
             current_data = []
-        elif line.startswith('Number of threads:'):
+        elif line.startswith('synchronous'):
             if current_thread is not None and current_data:
                 data.append(_create_dataframe(current_data, header, current_thread, current_schedule))
-            current_thread = int(line.split(':')[1].strip())
+            current_schedule = 'synchronous'
+            current_thread = int(line.split('threads:')[1].strip().rstrip(')'))
             current_data = []
         elif line.startswith('array_size,average_time'):
             header = line.split(',')
@@ -101,14 +102,18 @@ def plot_execution_time(ax, data, threads, schedule_types):
                 annotation='Less is better ↓')
 
 def plot_speedup(ax, data, threads, schedule_types):
-    # Calculate sequential times for speedup reference
-    seq_times = {schedule: data[(data['threads'] == 1) & (data['schedule'] == schedule)]
-                .set_index('array_size')['average_time'] for schedule in schedule_types}
+    # Calculate sequential times for speedup reference using synchronous run
+    seq_times = data[(data['threads'] == 1) & (data['schedule'] == 'synchronous')]
+    seq_times = seq_times.set_index('array_size')['average_time']
     
     for schedule in schedule_types:
         thread_data = data[(data['threads'] == threads) & 
                           (data['schedule'] == schedule)].set_index('array_size')
-        speedup = seq_times[schedule] / thread_data['average_time']
+        if thread_data.empty:
+            print(f"No data found for schedule={schedule}, threads={threads}")
+            continue
+            
+        speedup = seq_times / thread_data['average_time']
         
         # Plot speedup line
         ax.plot(thread_data.index, speedup,
@@ -140,6 +145,11 @@ def plot_speedup(ax, data, threads, schedule_types):
 def create_comparison_table(data, exec_time_threads, schedule_types, largest_size):
     comparison_table = []
     
+    # Get synchronous time for the largest size
+    sync_time = data[(data['threads'] == 1) & 
+                    (data['array_size'] == largest_size) & 
+                    (data['schedule'] == 'synchronous')]['average_time'].iloc[0]
+    
     for threads in exec_time_threads:
         row = {'Threads': threads}
         for schedule in schedule_types:
@@ -148,11 +158,8 @@ def create_comparison_table(data, exec_time_threads, schedule_types, largest_siz
                        (data['array_size'] == largest_size) & 
                        (data['schedule'] == schedule)]['average_time'].iloc[0]
             
-            # Calculate speedup relative to sequential execution
-            seq_time = data[(data['threads'] == 1) & 
-                          (data['array_size'] == largest_size) & 
-                          (data['schedule'] == schedule)]['average_time'].iloc[0]
-            speedup = seq_time / time
+            # Calculate speedup relative to synchronous execution
+            speedup = sync_time / time
             
             row[f'{schedule.capitalize()} Time (s)'] = f'{time:.6f}'
             row[f'{schedule.capitalize()} Speedup'] = f'{speedup:.3f}x'
@@ -162,26 +169,32 @@ def create_comparison_table(data, exec_time_threads, schedule_types, largest_siz
     return pd.DataFrame(comparison_table)
 
 if __name__ == "__main__":
+    # Get the directory where the script is located
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    
     # Ensure results directory exists
-    os.makedirs('results', exist_ok=True)
+    results_dir = os.path.join(script_dir, 'results')
+    os.makedirs(results_dir, exist_ok=True)
     
     # Load and process data
-    data = read_csv_data('data')
-    schedule_types = sorted(data['schedule'].unique())
+    data_file = os.path.join(script_dir, 'data')
+    data = read_csv_data(data_file)
+    schedule_types = sorted([s for s in data['schedule'].unique() if s != 'synchronous'])
+    print("Schedule types:", schedule_types)
     setup_plot_style()
     
     # Generate execution time plots
     _, axes = plt.subplots(2, 2, figsize=(15, 12))
     axes = axes.flatten()
     
-    exec_time_threads = [1, 2, 4, 8]
+    exec_time_threads = [2, 4, 6, 8]
     for i, threads in enumerate(exec_time_threads):
         plot_execution_time(axes[i], data, threads, schedule_types)
     
     plt.suptitle(f'Execution Time Comparison: {" vs ".join(s.capitalize() for s in schedule_types)} Scheduling',
                  y=1.02, fontsize=14)
     plt.tight_layout()
-    plt.savefig('results/execution_time_vs_problem_size.png', bbox_inches='tight', dpi=300)
+    plt.savefig(os.path.join(results_dir, 'execution_time_vs_problem_size.png'), bbox_inches='tight', dpi=300)
     
     # Generate speedup plots
     _, axes = plt.subplots(2, 2, figsize=(15, 12))
@@ -194,12 +207,12 @@ if __name__ == "__main__":
     plt.suptitle(f'Speedup Comparison: {" vs ".join(s.capitalize() for s in schedule_types)} Scheduling',
                  y=1.02, fontsize=14)
     plt.tight_layout()
-    plt.savefig('results/speedup_comparison.png', bbox_inches='tight', dpi=300)
+    plt.savefig(os.path.join(results_dir, 'speedup_comparison.png'), bbox_inches='tight', dpi=300)
     
     # Generate comparison table for largest problem size
     largest_size = data['array_size'].max()
     df_comparison = create_comparison_table(data, exec_time_threads, schedule_types, largest_size)
-    df_comparison.to_csv('results/comparison_table.csv', index=False)
+    df_comparison.to_csv(os.path.join(results_dir, 'comparison_table.csv'), index=False)
     
     # Print comparison table
     print(f"\nComparison Table for largest array size ({largest_size} elements):")

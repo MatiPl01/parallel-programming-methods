@@ -1,0 +1,2 @@
+array_size,num_threads,num_buckets,initial_bucket_capacity,random_time,distribute_time,sort_time,rewrite_time,total_time
+Error: Program exited with error code. Stopping execution.
