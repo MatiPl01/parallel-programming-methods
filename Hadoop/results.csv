@@ -1,0 +1,4 @@
+nCores,confId,dataSize,time
+1,seq,1GB,60.690030
+1,seq,5GB,305.770629
+1,seq,10GB,618.923397
