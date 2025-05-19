@@ -1,0 +1,93 @@
+Seq 1G 2 nodes
+
+51.209039s
+52.812349s
+
+Seq 1G 4 nodes
+
+61.460471s
+54.990551s
+
+Seq 5G 2 nodes
+
+258.092553s
+261.532265s
+
+Seq 5G 4 nodes
+
+280.136886s
+280.179743s
+
+Seq 10G 2 nodes
+
+513.633703s
+516.145535s
+
+Seq 10G 4 nodes
+
+569.379933s
+564.116379s
+
+Hadoop 1G 2 nodes
+
+real	1m15.007s
+user	0m7.924s
+sys	0m0.402s
+
+real	1m14.912s
+user	0m7.895s
+sys	0m0.433s
+
+Hadoop 1G 4 nodes
+
+real	1m14.641s
+user	0m7.361s
+sys	0m0.449s
+
+real	1m11.307s
+user	0m7.750s
+sys	0m0.475s
+
+Hadoop 5G 2 nodes
+
+real	4m28.141s
+user	0m8.455s
+sys	0m0.486s
+
+real	4m27.773s
+user	0m8.670s
+sys	0m0.440s
+
+Hadoop 5G 4 nodes
+
+real	4m28.301s
+user	0m9.366s
+sys	0m0.612s
+
+real	4m29.672s
+user	0m8.562s
+sys	0m0.508s
+
+Hadoop 10G 2 nodes
+
+real	8m15.494s
+user	0m8.829s
+sys	0m0.738s
+
+real	8m11.062s
+user	0m9.810s
+sys	0m0.533s
+
+Hadoop 10G 4 nodes
+
+real	8m37.367s
+user	0m8.923s
+sys	0m0.730s
+
+real	8m30.255s
+user	0m8.781s
+sys	0m0.828s
+
+Configuration, Primary Node, Core Nodes, Instance Type, Number of Core Nodes, Total vCPUs (Cores)
+Stronger Nodes, m5.xlarge, m5.4xlarge (16 cores), 2, 32
+Weaker Nodes, m5.xlarge, m5.2xlarge (8 cores), 4, 32
